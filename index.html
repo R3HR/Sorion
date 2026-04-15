@@ -709,12 +709,24 @@
 
   async function loadData() {
     try {
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/card_prices?select=*&order=fmv.desc&limit=10000`,
-        { headers: { 'apikey': ANON_KEY, 'Authorization': 'Bearer ' + ANON_KEY } }
-      );
-      if (!res.ok) throw new Error();
-      allData = await res.json();
+      // Fetch all records in batches of 1000 (Supabase default limit)
+      let all = [];
+      let from = 0;
+      const batchSize = 1000;
+
+      while (true) {
+        const res = await fetch(
+          `${SUPABASE_URL}/rest/v1/card_prices?select=*&order=fmv.desc&limit=${batchSize}&offset=${from}`,
+          { headers: { 'apikey': ANON_KEY, 'Authorization': 'Bearer ' + ANON_KEY } }
+        );
+        if (!res.ok) throw new Error('Failed to load');
+        const batch = await res.json();
+        all = all.concat(batch);
+        if (batch.length < batchSize) break;
+        from += batchSize;
+      }
+
+      allData = all;
       updateHeroStats();
       setScarcity('limited');
     } catch(e) {
