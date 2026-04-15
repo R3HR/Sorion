@@ -890,6 +890,8 @@
       </tr>`;
     }).join('');
     renderPagination();
+    // Load 30d history for sparklines asynchronously
+    setTimeout(loadVisibleHistory, 100);
   }
 
   function renderPagination() {
@@ -924,7 +926,70 @@
     return `<span class="${cls}">${sign}${Math.abs(pct).toFixed(2)}%</span>`;
   }
 
+  // ── Price History Cache ───────────────────────────────────────
+  const historyCache = {};
+
+  async function loadHistory(playerSlug, scarcity) {
+    const key = `${playerSlug}_${scarcity}`;
+    if (historyCache[key]) return historyCache[key];
+
+    try {
+      const since = new Date();
+      since.setDate(since.getDate() - 30);
+      const sinceStr = since.toISOString().split('T')[0];
+
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/price_history?player_slug=eq.${playerSlug}&scarcity=eq.${scarcity}&recorded_at=gte.${sinceStr}&order=recorded_at.asc&select=price,recorded_at`,
+        { headers: { 'apikey': ANON_KEY, 'Authorization': 'Bearer ' + ANON_KEY } }
+      );
+      if (!res.ok) return null;
+      const data = await res.json();
+      historyCache[key] = data;
+      return data;
+    } catch { return null; }
+  }
+
+  function renderSparklineFromHistory(history) {
+    if (!history || history.length < 2) return null;
+
+    const points = history.map(h => h.price);
+    const W = 80, H = 28;
+    const min = Math.min(...points);
+    const max = Math.max(...points);
+    const range = max - min || 1;
+
+    const coords = points.map((v, i) => {
+      const x = (i / (points.length - 1)) * W;
+      const y = H - ((v - min) / range) * (H - 4) - 2;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    });
+
+    const trend = points[points.length - 1] - points[0];
+    const color = trend > 0 ? '#00ff88' : trend < 0 ? '#ff2d78' : '#505080';
+    const glow  = trend > 0
+      ? 'filter:drop-shadow(0 0 3px #00ff88)'
+      : trend < 0
+      ? 'filter:drop-shadow(0 0 3px #ff2d78)'
+      : '';
+
+    const lastCoord = coords[coords.length - 1].split(',');
+    const trendArrow = trend > 0
+      ? `<span style="color:#00ff88;font-size:9px;font-family:'Share Tech Mono',monospace;margin-left:4px">▲</span>`
+      : trend < 0
+      ? `<span style="color:#ff2d78;font-size:9px;font-family:'Share Tech Mono',monospace;margin-left:4px">▼</span>`
+      : '';
+
+    return `<div style="display:flex;align-items:center">
+      <svg width="${W}" height="${H}" style="${glow}" xmlns="http://www.w3.org/2000/svg">
+        <polyline points="${coords.join(' ')}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+        <circle cx="${lastCoord[0]}" cy="${lastCoord[1]}" r="2.5" fill="${color}"/>
+      </svg>
+      ${trendArrow}
+    </div>`;
+  }
+
   function renderSparkline(r) {
+    // Fallback to sale data until history is available
     const points = [r.sale_5, r.sale_4, r.sale_3, r.sale_2, r.sale_1]
       .filter(v => v !== null && v > 0);
 
@@ -937,49 +1002,45 @@
     const max = Math.max(...points);
     const range = max - min || 1;
 
-    // Calculate SVG coordinates
     const coords = points.map((v, i) => {
       const x = (i / (points.length - 1)) * W;
       const y = H - ((v - min) / range) * (H - 4) - 2;
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     });
 
-    const polyline = coords.join(' ');
-
-    // Color based on overall trend
-    const trend = points[points.length - 1] - points[0];
+    const trend  = points[points.length - 1] - points[0];
     const color  = trend > 0 ? '#00ff88' : trend < 0 ? '#ff2d78' : '#505080';
-    const glow   = trend > 0
-      ? 'filter:drop-shadow(0 0 3px #00ff88)'
-      : trend < 0
-      ? 'filter:drop-shadow(0 0 3px #ff2d78)'
-      : '';
-
+    const glow   = trend > 0 ? 'filter:drop-shadow(0 0 3px #00ff88)' : trend < 0 ? 'filter:drop-shadow(0 0 3px #ff2d78)' : '';
+    const lastCoord = coords[coords.length - 1].split(',');
     const trendArrow = trend > 0
       ? `<span style="color:#00ff88;font-size:9px;font-family:'Share Tech Mono',monospace;margin-left:4px">▲</span>`
       : trend < 0
       ? `<span style="color:#ff2d78;font-size:9px;font-family:'Share Tech Mono',monospace;margin-left:4px">▼</span>`
       : '';
 
-    // Last point dot
-    const lastCoord = coords[coords.length - 1].split(',');
-    const dotX = parseFloat(lastCoord[0]);
-    const dotY = parseFloat(lastCoord[1]);
-
-    return `<div style="display:flex;align-items:center">
+    return `<div style="display:flex;align-items:center" data-slug="${r.player_slug}" data-scarcity="${r.scarcity}" class="sparkline-cell">
       <svg width="${W}" height="${H}" style="${glow}" xmlns="http://www.w3.org/2000/svg">
-        <polyline
-          points="${polyline}"
-          fill="none"
-          stroke="${color}"
-          stroke-width="1.5"
-          stroke-linejoin="round"
-          stroke-linecap="round"
-        />
-        <circle cx="${dotX}" cy="${dotY}" r="2.5" fill="${color}"/>
+        <polyline points="${coords.join(' ')}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+        <circle cx="${lastCoord[0]}" cy="${lastCoord[1]}" r="2.5" fill="${color}"/>
       </svg>
       ${trendArrow}
     </div>`;
+  }
+
+  // Lazy load 30d history for visible sparklines
+  async function loadVisibleHistory() {
+    const cells = document.querySelectorAll('.sparkline-cell');
+    for (const cell of cells) {
+      const slug     = cell.dataset.slug;
+      const scarcity = cell.dataset.scarcity;
+      if (!slug) continue;
+
+      const history = await loadHistory(slug, scarcity);
+      if (!history || history.length < 2) continue;
+
+      const svg = renderSparklineFromHistory(history);
+      if (svg) cell.closest('td').innerHTML = svg;
+    }
   }
 
   function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
