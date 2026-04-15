@@ -523,7 +523,22 @@
     font-size: 11px;
   }
 
-  .liq-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .sparkline-wrap {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 28px;
+    padding: 2px 0;
+  }
+
+  .spark-bar {
+    width: 5px;
+    border-radius: 2px 2px 0 0;
+    transition: opacity 0.15s;
+    min-height: 2px;
+  }
+
+  tbody tr:hover .spark-bar { opacity: 0.8; }
   .liq-high   .liq-dot { background: var(--up); box-shadow: 0 0 6px var(--up); }
   .liq-high   { color: var(--up); }
   .liq-medium .liq-dot { background: var(--limited); }
@@ -680,7 +695,7 @@
           <th onclick="sortBy('sale_1')">Last Sale</th>
           <th onclick="sortBy('avg_sales')">Avg Sales</th>
           <th class="col-liq" onclick="sortBy('sales_count')">Liquidity</th>
-          <th class="col-supply col-7d" onclick="sortBy('available_supply')">Supply</th>
+          <th class="col-supply col-7d">7d Trend</th>
         </tr>
       </thead>
       <tbody id="table-body">
@@ -822,7 +837,7 @@
         <td class="price">${last}</td>
         <td class="price">${avg}</td>
         <td class="col-liq"><div class="liq ${liqClass}"><div class="liq-dot"></div>${liqLabel} (${cnt})</div></td>
-        <td class="col-supply col-7d" style="font-family:'Share Tech Mono',monospace;font-size:11px;color:#404060">${r.available_supply??'—'}</td>
+        <td class="col-supply col-7d">${renderSparkline(r)}</td>
       </tr>`;
     }).join('');
     renderPagination();
@@ -848,6 +863,55 @@
     if (p<1||p>total) return;
     currentPage=p; renderTable();
     window.scrollTo({top:0,behavior:'smooth'});
+  }
+
+  function renderSparkline(r) {
+    // Collect available sales data points
+    const points = [r.sale_5, r.sale_4, r.sale_3, r.sale_2, r.sale_1]
+      .filter(v => v !== null && v > 0);
+
+    if (points.length < 2) {
+      return `<span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#303050">no data</span>`;
+    }
+
+    const min = Math.min(...points);
+    const max = Math.max(...points);
+    const range = max - min || 1;
+    const maxH = 24;
+    const minH = 3;
+
+    const bars = points.map((v, i) => {
+      const h = minH + ((v - min) / range) * (maxH - minH);
+      let color;
+      if (i === 0) {
+        color = '#404060'; // first bar neutral
+      } else if (points[i] > points[i - 1]) {
+        color = '#00ff88'; // neon green — up
+      } else if (points[i] < points[i - 1]) {
+        color = '#ff2d78'; // neon pink — down
+      } else {
+        color = '#404060'; // gray — flat
+      }
+
+      const glow = color === '#00ff88'
+        ? `box-shadow:0 0 6px #00ff88`
+        : color === '#ff2d78'
+        ? `box-shadow:0 0 6px #ff2d78`
+        : '';
+
+      return `<div class="spark-bar" style="height:${h.toFixed(1)}px;background:${color};${glow}"></div>`;
+    }).join('');
+
+    const trend = points[points.length-1] > points[0]
+      ? `<span style="color:#00ff88;font-size:9px;font-family:'Share Tech Mono',monospace;margin-left:4px">▲</span>`
+      : points[points.length-1] < points[0]
+      ? `<span style="color:#ff2d78;font-size:9px;font-family:'Share Tech Mono',monospace;margin-left:4px">▼</span>`
+      : '';
+
+    return `<div style="display:flex;align-items:center">
+      <div class="sparkline-wrap">${bars}</div>
+      ${trend}
+    </div>`;
   }
 
   function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
