@@ -1121,7 +1121,7 @@
 <div class="wrap">
   <header>
     <div class="logo">
-      <img src="logo.png" alt="SORION" style="height:48px;width:auto;object-fit:contain">
+      <img src="logo.png" alt="SORION" style="height:72px;width:auto;object-fit:contain">
       <div class="logo-sub">// Market Intelligence</div>
     </div>
     <nav class="nav-links">
@@ -1282,7 +1282,7 @@
     ['ltd','rar','sr','all'].forEach(k => document.getElementById('btn-'+k).classList.remove('active'));
     const map = {limited:'ltd',rare:'rar',super_rare:'sr',all:'all'};
     document.getElementById('btn-'+(map[sc]||'all')).classList.add('active');
-    currentPage = 1; filterTable();
+    currentPage = 1; filterTable(); renderMovers();
   }
 
   function filterTable() {
@@ -1299,7 +1299,6 @@
       return sortDir*(av-bv);
     });
     renderTable();
-    renderMovers();
   }
 
   function sortBy(key) {
@@ -1473,8 +1472,9 @@
   function renderMovers() {
     if (!allData.length) return;
 
-    // Filter current scarcity with valid 7d data
-    const withChange = filtered.filter(r => r.sale_1 && r.sale_5 && r.sale_5 > 0);
+    // Always use allData filtered only by scarcity — never by search
+    const scarcityData = allData.filter(r => r.scarcity === scarcityFilter || scarcityFilter === 'all');
+    const withChange = scarcityData.filter(r => r.sale_1 && r.sale_5 && r.sale_5 > 0);
     const withPct = withChange.map(r => ({
       ...r,
       pct7d: ((r.sale_1 - r.sale_5) / r.sale_5) * 100
