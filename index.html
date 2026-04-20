@@ -1192,8 +1192,8 @@
         <tr>
           <th style="width:48px">#</th>
           <th onclick="sortBy('player_name')">Player</th>
-          <th onclick="sortBy('change_24h')" class="col-24h">24h %</th>
-          <th onclick="sortBy('change_7d')"  class="col-7d2">7d %</th>
+          <th onclick="sortBy('change_24h')" class="col-24h" style="cursor:pointer">24h % ↕</th>
+          <th onclick="sortBy('change_7d')"  class="col-7d2" style="cursor:pointer">7d % ↕</th>
           <th class="col-tier">Tier</th>
           <th onclick="sortBy('fmv')" class="sorted">FMV ↓</th>
           <th onclick="sortBy('floor_price')" class="col-floor">Floor</th>
@@ -1293,6 +1293,13 @@
           !(r.team_name||'').toLowerCase().includes(search)) return false;
       return true;
     });
+    // Add computed change fields for sorting
+    filtered = filtered.map(r => ({
+      ...r,
+      change_24h: r.sale_1 && r.sale_2 && r.sale_2 > 0 ? ((r.sale_1 - r.sale_2) / r.sale_2) * 100 : null,
+      change_7d:  r.sale_1 && r.sale_5 && r.sale_5 > 0 ? ((r.sale_1 - r.sale_5) / r.sale_5) * 100 : null,
+    }));
+
     filtered.sort((a,b) => {
       const av = a[sortKey]??-Infinity, bv = b[sortKey]??-Infinity;
       if (typeof av==='string') return sortDir*av.localeCompare(bv);
