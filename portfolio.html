@@ -584,8 +584,8 @@
 
   // ── Auth ──────────────────────────────────────────────────────
   function loginWithSorare() {
-    localStorage.setItem('sorare_return_to', 'https://sorion.pro/portfolio.html');
-    const url = `https://sorare.com/oauth/authorize?client_id=${SORARE_CLIENT_ID}&redirect_uri=${encodeURIComponent('https://craftlog.pro/auth/callback')}&response_type=code&scope=`;
+    const returnTo = encodeURIComponent('https://sorion.pro/portfolio.html');
+    const url = `https://sorare.com/oauth/authorize?client_id=${SORARE_CLIENT_ID}&redirect_uri=${encodeURIComponent('https://craftlog.pro/auth/callback')}&response_type=code&scope=&state=${returnTo}`;
     window.location.href = url;
   }
 
